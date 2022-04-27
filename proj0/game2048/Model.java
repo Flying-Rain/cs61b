@@ -5,7 +5,7 @@ import java.util.Observable;
 
 
 /** The state of a game of 2048.
- *  @author TODO: YOUR NAME HERE
+ *  @author FlyingRain
  */
 public class Model extends Observable {
     /** Current contents of the board. */
@@ -94,6 +94,27 @@ public class Model extends Observable {
         setChanged();
     }
 
+    /**
+     * 记录每个方块在每次操作时是否进行过合并。即方块移动追踪数组
+     */
+    private int[][] moveTrace;
+
+    /**
+     * 初始化方块移动追踪数组
+     * @param length 数组的长度
+     */
+    private void initMoveTrace(int length) {
+        // 如果一开始没有初始化，则先进行初始化
+        if (moveTrace == null) {
+            moveTrace = new int[length][length];
+        }
+        for (int i = 0; i < length; i++) {
+            for (int j = 0; j < length; j++) {
+                moveTrace[i][j] = 0;
+            }
+        }
+    }
+
     /** Tilt the board toward SIDE. Return true iff this changes the board.
      *
      * 1. If two Tile objects are adjacent in the direction of motion and have
@@ -109,17 +130,80 @@ public class Model extends Observable {
     public boolean tilt(Side side) {
         boolean changed;
         changed = false;
-
         // TODO: Modify this.board (and perhaps this.score) to account
         // for the tilt to the Side SIDE. If the board changed, set the
         // changed local variable to true.
 
+        Board board = this.board;
+        int length = board.size();
+        initMoveTrace(length);
+        // 1. 首先考虑上移
+        if (side.equals(Side.NORTH)) {
+            changed = moveUp();
+        }
+        else {
+            board.setViewingPerspective(side);
+            changed = moveUp();
+            board.setViewingPerspective(Side.NORTH);
+        }
         checkGameOver();
         if (changed) {
             setChanged();
         }
         return changed;
     }
+
+    private boolean moveUp() {
+        boolean changed = false;
+        Board board = this.board;
+        int length = board.size();
+        initMoveTrace(length);
+        // 遍历全图
+        for (int col = 0; col < length; col++) {
+            // 从最顶层开始
+            for (int row = length - 1; row >= 0; row--) {
+                Tile tile = board.tile(col, row);
+                // 1. 如果当前方块是空，则不作操作
+                if (tile != null) {
+                    // 2. 找到上方的最高层
+                    int lastPosition = findLastPosition(board, col, row);
+                    // 2.1 如果当前层就是最高层，则无操作
+                    if (lastPosition != row ) {
+                        changed = true;
+                        boolean mergeFlag = board.move(col, lastPosition, tile);
+                        if (mergeFlag) {
+                            score += tile.value() * 2;
+                            moveTrace[col][lastPosition] = 1;
+                        }
+                    }
+                }
+            }
+        }
+        return changed;
+    }
+
+    private int findLastPosition(Board board, int col, int row) {
+        int length = board.size();
+        Tile currentTile = board.tile(col, row);
+        int currentValue = currentTile.value();
+        int lastPos = 0;
+        // 从 row 的上一层开始
+        lastPos = row;
+        for (int i = row + 1; i < length; i++) {
+            Tile tile = board.tile(col, i);
+            lastPos = i;
+            // 如果是空的，则继续往上找
+            if (tile == null) {
+                continue;
+            }
+            if (tile.value() != currentValue || moveTrace[col][lastPos] != 0) {
+                lastPos -= 1;
+            }
+            break;
+        }
+        return lastPos;
+    }
+
 
     /** Checks if the game is over and sets the gameOver variable
      *  appropriately.
@@ -138,6 +222,16 @@ public class Model extends Observable {
      * */
     public static boolean emptySpaceExists(Board b) {
         // TODO: Fill in this function.
+        int length = b.size();
+        // 遍历全图
+        for (int col = 0; col < length; col++) {
+            for (int row = 0; row < length; row++) {
+                // 如果其中一个方块为空，则证明存在空方块
+                if (b.tile(col, row) == null) {
+                    return true;
+                }
+            }
+        }
         return false;
     }
 
@@ -148,6 +242,17 @@ public class Model extends Observable {
      */
     public static boolean maxTileExists(Board b) {
         // TODO: Fill in this function.
+        int length = b.size();
+        // 遍历全图
+        for (int col = 0; col < length; col++) {
+            for (int row = 0; row < length; row++) {
+                Tile tile = b.tile(col, row);
+                // 如果其中一个方块的值为2048，则证明存在最大的方块
+                if (tile != null && tile.value() == MAX_PIECE) {
+                    return true;
+                }
+            }
+        }
         return false;
     }
 
@@ -159,6 +264,34 @@ public class Model extends Observable {
      */
     public static boolean atLeastOneMoveExists(Board b) {
         // TODO: Fill in this function.
+        if (emptySpaceExists(b)) {
+            return true;
+        }
+        int length = b.size();
+        // 遍历全图
+        for (int col = 0; col < length; col++) {
+            for (int row = 0; row < length; row++) {
+                Tile tile = b.tile(col, row);
+                int value = tile.value();
+                // 2. 寻找其相邻的方块，并验证其值是否相等
+                // 2.1 左边方块
+                if (row - 1 >= 0 && b.tile(col, row - 1).value() == value) {
+                    return true;
+                }
+                // 2.2 右边方块
+                if (row + 1 < length && b.tile(col, row + 1).value() == value) {
+                    return true;
+                }
+                // 2.3 上边方块
+                if (col - 1 >= 0 && b.tile(col - 1, row).value() == value) {
+                    return true;
+                }
+                // 2.4 下边方块
+                if (col + 1 < length && b.tile(col + 1, row).value() == value) {
+                    return true;
+                }
+            }
+        }
         return false;
     }
 
